@@ -1,35 +1,52 @@
 import cv2
-from keras.models import load_model
-from keras_preprocessing.image import img_to_array
-from keras.preprocessing import image
-from PIL import ImageFont, ImageDraw, Image 
+from deepface import DeepFace
 import numpy as np
-face_classifier = cv2.CascadeClassifier(cv2.data.haarcascades +'haarcascade_frontalface_default.xml')
-classifier =load_model('D:/emotion_detection.h5')
-class_labels = ['Giận dữ', 'Ghê sợ', 'Sợ hãi', 'Hạnh phúc', 'Buồn', 'Bất ngờ', 'Trung lập']
-font = ImageFont.truetype("./arial.ttf", 32)
-b,g,r,a = 0,255,0,0
+from PIL import ImageFont, ImageDraw, Image
+
+# Khởi tạo Webcam
 cap = cv2.VideoCapture(0)
+
+# Cấu hình font tiếng Việt (đảm bảo file arial.ttf nằm cùng thư mục code)
+try:
+    font = ImageFont.truetype("./arial.ttf", 24)
+except:
+    font = ImageFont.load_default()
+
+# Từ điển dịch cảm xúc (Chương 2)
+emotion_dict = {
+    'angry': 'Gian du', 'disgust': 'Ghe so', 'fear': 'So hai',
+    'happy': 'Hanh phuc', 'sad': 'Buon', 'surprise': 'Bat ngo', 'neutral': 'Trung lap'
+}
+
+print("Đang chạy hệ thống... Nhấn 'q' để thoát.")
+
 while True:
     ret, frame = cap.read()
-    labels = []
-    gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-    faces = face_classifier.detectMultiScale(gray,1.3,5)    
-    for (x,y,w,h) in faces:
-        cv2.rectangle(frame,(x,y),(x+w,y+h),(255,0,0),2)
-        roi_gray = gray[y:y+h,x:x+w] # the face after cut from frame
-        roi_gray = cv2.resize(roi_gray,(48,48),interpolation=cv2.INTER_AREA)
-        roi = roi_gray.astype('float')/255.0
-        roi = img_to_array(roi)
-        roi = np.expand_dims(roi,axis=0)
-        preds = classifier.predict(roi)[0]
-        label=class_labels[preds.argmax()]
-        img_pil = Image.fromarray(frame)
-        draw = ImageDraw.Draw(img_pil)
-        draw.text((50, 80), label, font = font, fill = (b, g, r, a))
-        frame = np.array(img_pil) #hiển thị ra window    
-    cv2.imshow('Emotion Detection',frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    if not ret: break
+
+    try:
+        # Sử dụng DeepFace để phân tích (Chương 4 & 5)
+        results = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False)
+        
+        for res in results:
+            x, y, w, h = res['region']['x'], res['region']['y'], res['region']['w'], res['region']['h']
+            emotion_en = res['dominant_emotion']
+            label = emotion_dict.get(emotion_en, emotion_en)
+            
+            # Vẽ khung và nhãn (Chương 6)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            # Hiển thị tiếng Việt bằng PIL
+            img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            draw = ImageDraw.Draw(img_pil)
+            draw.text((x, y - 30), label, font=font, fill=(0, 255, 0))
+            frame = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+            
+    except Exception:
+        pass
+
+    cv2.imshow('He thong Nhan dien Cam xuc - LHU', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'): break
+
 cap.release()
 cv2.destroyAllWindows()
